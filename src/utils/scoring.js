@@ -62,8 +62,8 @@ export function calculateAuthorPoints(totalAnswers, wrongCount) {
   const correctCount = totalAnswers - wrongCount
   // Nobody got it right = 0 (too hard)
   if (correctCount === 0) return 0
-  // Everyone got it right = 0 (too easy)
-  if (correctCount === totalAnswers) return 0
+  // Everyone got it right = -500 penalty (too easy)
+  if (correctCount === totalAnswers) return -500
   // Exponential decay: 1000 * e^(-k * correctFraction)
   // where correctFraction excludes the first correct answer
   // At 1 correct: fraction=0 → 1000 points
