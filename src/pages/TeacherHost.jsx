@@ -260,6 +260,8 @@ export default function TeacherHost() {
       for (const [id, data] of Object.entries(authorDifficulty)) {
         if (data.questionCount === 0) continue
         const avg = data.totalCorrectPct / data.questionCount
+        // Must have > 0% correct — questions must be answerable, not impossible
+        if (avg <= 0) continue
         if (avg < lowestAvgCorrect) {
           lowestAvgCorrect = avg
           challengingId = id

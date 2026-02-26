@@ -10,6 +10,12 @@ import PlayerList from '../components/PlayerList'
 import QuestionForm from '../components/QuestionForm'
 import AnswerButtons from '../components/AnswerButtons'
 
+function getOrdinal(n) {
+  const s = ['th', 'st', 'nd', 'rd']
+  const v = n % 100
+  return n + (s[(v - 20) % 10] || s[v] || s[0])
+}
+
 export default function StudentGame() {
   const navigate = useNavigate()
   const roomCode = getSessionRoomCode()
@@ -121,6 +127,15 @@ export default function StudentGame() {
     await submitAnswer(roomCode, questionId, playerId, answerIndex)
   }
 
+  // Calculate current rank and gap to player ahead
+  const getRankInfo = () => {
+    const sorted = [...playerList].sort((a, b) => b.score - a.score)
+    const rank = sorted.findIndex(p => p.id === playerId) + 1
+    const gap = rank > 1 ? sorted[rank - 2].score - (myPlayer?.score || 0) : 0
+    const aheadName = rank > 1 ? sorted[rank - 2].name : null
+    return { rank, gap, aheadName, total: sorted.length }
+  }
+
   const currentQuestion = quiz?.questionOrder && questionList.length > 0
     ? questionList.find(q => q.id === quiz.questionOrder[quiz.currentQuestionIndex])
     : null
@@ -212,12 +227,29 @@ export default function StudentGame() {
           <div className="bg-dark-card rounded-2xl p-6 text-center max-w-sm">
             <p className="text-lg">{currentQuestion.text}</p>
           </div>
-          {quiz.showingResults && myPlayer && (
-            <div className="mt-6 animate-slide-up text-center">
-              <div className="text-gray-400 mb-1">Your score</div>
-              <div className="text-3xl font-bold text-quiz-yellow">{myPlayer.score?.toLocaleString()}</div>
-            </div>
-          )}
+          {quiz.showingResults && myPlayer && (() => {
+            const { rank, gap, aheadName, total } = getRankInfo()
+            return (
+              <div className="mt-6 animate-slide-up text-center">
+                <div className="text-gray-400 mb-1">Your score</div>
+                <div className="text-3xl font-bold text-quiz-yellow mb-3">{myPlayer.score?.toLocaleString()}</div>
+                <div className="bg-dark-card rounded-xl px-5 py-3">
+                  <div className="text-lg font-bold">
+                    {rank === 1 ? (
+                      <span className="text-quiz-green">You're in 1st place!</span>
+                    ) : (
+                      <>
+                        <span className="text-white">You're in <span className="text-quiz-blue">{getOrdinal(rank)}</span> place</span>
+                        <div className="text-sm text-gray-400 mt-1">
+                          {gap.toLocaleString()} point{gap !== 1 ? 's' : ''} behind {aheadName}
+                        </div>
+                      </>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )
+          })()}
         </div>
       )
     }
@@ -233,17 +265,34 @@ export default function StudentGame() {
             {questionResult.isCorrect ? 'Correct!' : 'Wrong!'}
           </h2>
 
-          {myPlayer && (
-            <div className="text-center animate-slide-up mt-4">
-              <div className="text-gray-400 mb-1">Total Score</div>
-              <div className="text-4xl font-bold text-quiz-yellow">{myPlayer.score?.toLocaleString()}</div>
-              {myPlayer.streak >= 2 && (
-                <div className="text-xl mt-2 animate-streak">
-                  🔥 {myPlayer.streak} streak!
+          {myPlayer && (() => {
+            const { rank, gap, aheadName } = getRankInfo()
+            return (
+              <div className="text-center animate-slide-up mt-4">
+                <div className="text-gray-400 mb-1">Total Score</div>
+                <div className="text-4xl font-bold text-quiz-yellow mb-3">{myPlayer.score?.toLocaleString()}</div>
+                {myPlayer.streak >= 2 && (
+                  <div className="text-xl mb-3 animate-streak">
+                    🔥 {myPlayer.streak} streak!
+                  </div>
+                )}
+                <div className="bg-dark-card rounded-xl px-5 py-3">
+                  <div className="text-lg font-bold">
+                    {rank === 1 ? (
+                      <span className="text-quiz-green">You're in 1st place!</span>
+                    ) : (
+                      <>
+                        <span className="text-white">You're in <span className="text-quiz-blue">{getOrdinal(rank)}</span> place</span>
+                        <div className="text-sm text-gray-400 mt-1">
+                          {gap.toLocaleString()} point{gap !== 1 ? 's' : ''} behind {aheadName}
+                        </div>
+                      </>
+                    )}
+                  </div>
                 </div>
-              )}
-            </div>
-          )}
+              </div>
+            )
+          })()}
         </div>
       )
     }
