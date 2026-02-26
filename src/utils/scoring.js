@@ -47,16 +47,32 @@ export function calculateAnsweringPoints(isCorrect, timeToAnswer, totalQuestionT
 }
 
 /**
- * Calculate author points based on the percentage of players who got it wrong.
- * Uses sine curve: max points at 50% wrong, 0 at 0% or 100% wrong.
+ * Calculate author points based on how many players got it right.
+ * - 0% correct (everyone wrong) = 0 points (too hard / trick question)
+ * - Only 1 person correct = 1000 points (perfect difficulty)
+ * - Exponential decay as more players get it right
+ * - 75% correct ≈ ~80 points
+ * - 100% correct = 0 points (too easy)
  * @param {number} totalAnswers - number of players who answered (excluding author)
  * @param {number} wrongCount - number who got it wrong
- * @returns {number} author points
+ * @returns {number} author points (always a whole number)
  */
 export function calculateAuthorPoints(totalAnswers, wrongCount) {
   if (totalAnswers < 2) return 0
-  const wrongPercent = wrongCount / totalAnswers
-  return Math.round(1000 * Math.sin(Math.PI * wrongPercent))
+  const correctCount = totalAnswers - wrongCount
+  // Nobody got it right = 0 (too hard)
+  if (correctCount === 0) return 0
+  // Everyone got it right = 0 (too easy)
+  if (correctCount === totalAnswers) return 0
+  // Exponential decay: 1000 * e^(-k * correctFraction)
+  // where correctFraction excludes the first correct answer
+  // At 1 correct: fraction=0 → 1000 points
+  // We use (correctCount - 1) / (totalAnswers - 1) so that
+  // exactly 1 correct maps to 0 and all correct maps to 1
+  const fraction = (correctCount - 1) / (totalAnswers - 1)
+  // k=3.2 gives ~95 pts at 75% correct in a 20-player class
+  const points = Math.round(1000 * Math.exp(-3.2 * fraction))
+  return points
 }
 
 /**
