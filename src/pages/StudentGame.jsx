@@ -287,12 +287,33 @@ export default function StudentGame() {
   if (phase === 'RESULTS') {
     const sortedPlayers = [...playerList].sort((a, b) => b.score - a.score)
     const myRank = sortedPlayers.findIndex(p => p.id === playerId) + 1
+    const wonProlific = settings?.prolificWinner === playerId
+    const wonChallenging = settings?.challengingWinner === playerId
 
     return (
       <div className="min-h-screen bg-dark-bg flex flex-col items-center justify-center p-6">
         <h1 className="text-3xl font-bold mb-6 text-transparent bg-clip-text bg-gradient-to-r from-quiz-yellow to-quiz-red">
           Game Over!
         </h1>
+
+        {(wonProlific || wonChallenging) && (
+          <div className="space-y-3 mb-6 w-full max-w-sm">
+            {wonProlific && (
+              <div className="bg-quiz-blue/20 border-2 border-quiz-blue rounded-xl p-4 text-center animate-slide-up">
+                <div className="text-3xl mb-1">📝</div>
+                <div className="text-lg font-bold text-quiz-blue">Most Prolific Author!</div>
+                <div className="text-quiz-green font-bold text-xl">+2,500 pts</div>
+              </div>
+            )}
+            {wonChallenging && (
+              <div className="bg-quiz-red/20 border-2 border-quiz-red rounded-xl p-4 text-center animate-slide-up" style={{ animationDelay: '0.2s' }}>
+                <div className="text-3xl mb-1">🧠</div>
+                <div className="text-lg font-bold text-quiz-red">Most Challenging Author!</div>
+                <div className="text-quiz-green font-bold text-xl">+2,500 pts</div>
+              </div>
+            )}
+          </div>
+        )}
 
         <div className="bg-dark-card rounded-2xl p-8 text-center mb-6 animate-slide-up">
           <div className="text-6xl mb-2">

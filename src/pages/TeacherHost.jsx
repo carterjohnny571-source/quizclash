@@ -1,10 +1,11 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useGameState } from '../hooks/useGameState'
 import { useTimer } from '../hooks/useTimer'
 import {
   generateRoomCode, createGame, getOrCreateHostId, setSessionRoomCode,
   updateSettings, setPhase, deleteQuestion, startQuiz, advanceQuestion,
-  showQuestionResults, getAnswersForQuestion, updatePlayer, kickPlayer
+  showQuestionResults, getAnswersForQuestion, updatePlayer, kickPlayer,
+  getAllAnswers, updateSettings as updateGameSettings
 } from '../firebase/database'
 import { processQuestionResults, shuffleArray } from '../utils/scoring'
 import CountdownTimer from '../components/CountdownTimer'
@@ -39,6 +40,11 @@ export default function TeacherHost() {
   // Question timer for quiz phase
   const [qTimerLeft, setQTimerLeft] = useState(0)
   const qTimerRef = useRef(null)
+
+  // Results reveal state
+  const [revealStage, setRevealStage] = useState(0) // 0=leaderboard, 1=prolific, 2=challenging, 3=final
+  const [awards, setAwards] = useState(null)
+  const awardsCalculated = useRef(false)
 
   // ─── Create Game ───
   const handleCreateGame = async () => {
@@ -202,6 +208,107 @@ export default function TeacherHost() {
       await advanceQuestion(roomCode, nextIndex)
     }
   }
+
+  // ─── Calculate Awards ───
+  useEffect(() => {
+    if (phase !== 'RESULTS' || awardsCalculated.current || !roomCode) return
+    awardsCalculated.current = true
+
+    const calcAwards = async () => {
+      const allAnswers = await getAllAnswers(roomCode)
+
+      // Most Prolific: player who wrote the most questions
+      const authorCounts = {}
+      for (const q of questionList) {
+        if (q.authorId) {
+          authorCounts[q.authorId] = (authorCounts[q.authorId] || 0) + 1
+        }
+      }
+      let prolificId = null
+      let prolificMax = 0
+      for (const [id, count] of Object.entries(authorCounts)) {
+        if (count > prolificMax) {
+          prolificMax = count
+          prolificId = id
+        }
+      }
+
+      // Most Challenging: author whose questions had the lowest average correct %
+      // Only consider questions that were actually used in the quiz
+      const usedQuestionIds = quiz?.questionOrder || []
+      const authorDifficulty = {} // { authorId: { totalCorrectPct, questionCount } }
+
+      for (const qId of usedQuestionIds) {
+        const question = questionList.find(q => q.id === qId)
+        if (!question) continue
+        const qAnswers = allAnswers?.[qId] || {}
+        const answerers = Object.entries(qAnswers).filter(([pid]) => pid !== question.authorId)
+        if (answerers.length === 0) continue
+
+        const correctCount = answerers.filter(([, a]) => a.answerIndex === question.correctIndex).length
+        const correctPct = correctCount / answerers.length
+
+        if (!authorDifficulty[question.authorId]) {
+          authorDifficulty[question.authorId] = { totalCorrectPct: 0, questionCount: 0 }
+        }
+        authorDifficulty[question.authorId].totalCorrectPct += correctPct
+        authorDifficulty[question.authorId].questionCount += 1
+      }
+
+      let challengingId = null
+      let lowestAvgCorrect = Infinity
+      for (const [id, data] of Object.entries(authorDifficulty)) {
+        if (data.questionCount === 0) continue
+        const avg = data.totalCorrectPct / data.questionCount
+        if (avg < lowestAvgCorrect) {
+          lowestAvgCorrect = avg
+          challengingId = id
+        }
+      }
+
+      setAwards({
+        prolific: prolificId ? {
+          playerId: prolificId,
+          name: playerList.find(p => p.id === prolificId)?.name || 'Unknown',
+          avatar: playerList.find(p => p.id === prolificId)?.avatar,
+          questionCount: prolificMax,
+          bonus: 2500
+        } : null,
+        challenging: challengingId ? {
+          playerId: challengingId,
+          name: playerList.find(p => p.id === challengingId)?.name || 'Unknown',
+          avatar: playerList.find(p => p.id === challengingId)?.avatar,
+          avgCorrectPct: Math.round((lowestAvgCorrect) * 100),
+          bonus: 2500
+        } : null
+      })
+    }
+
+    calcAwards()
+  }, [phase, roomCode])
+
+  // Apply bonus when reveal stage advances
+  useEffect(() => {
+    if (!awards || !roomCode) return
+
+    const applyBonus = async (playerId, bonus) => {
+      const player = players[playerId]
+      if (!player) return
+      await updatePlayer(roomCode, playerId, {
+        score: (player.score || 0) + bonus,
+        authorScore: (player.authorScore || 0) + bonus
+      })
+    }
+
+    if (revealStage === 1 && awards.prolific) {
+      applyBonus(awards.prolific.playerId, awards.prolific.bonus)
+      updateSettings(roomCode, { prolificWinner: awards.prolific.playerId })
+    }
+    if (revealStage === 2 && awards.challenging) {
+      applyBonus(awards.challenging.playerId, awards.challenging.bonus)
+      updateSettings(roomCode, { challengingWinner: awards.challenging.playerId })
+    }
+  }, [revealStage])
 
   // ─── Render: No Game Yet ───
   if (!roomCode) {
@@ -494,13 +601,107 @@ export default function TeacherHost() {
   if (phase === 'RESULTS') {
     return (
       <div className="min-h-screen bg-dark-bg flex flex-col items-center p-8">
-        <h1 className="text-4xl md:text-6xl font-bold mb-8 text-transparent bg-clip-text bg-gradient-to-r from-quiz-yellow to-quiz-red">
-          Final Results!
-        </h1>
+        {revealStage === 0 && (
+          <>
+            <h1 className="text-4xl md:text-6xl font-bold mb-8 text-transparent bg-clip-text bg-gradient-to-r from-quiz-yellow to-quiz-red">
+              Results So Far...
+            </h1>
+            <Leaderboard players={playerList} limit={playerList.length} showBreakdown={true} />
+            <button
+              onClick={() => setRevealStage(1)}
+              disabled={!awards}
+              className="mt-8 bg-quiz-purple hover:bg-purple-600 text-white text-2xl font-bold py-4 px-12 rounded-xl btn-press transition-all cursor-pointer disabled:bg-gray-700 disabled:text-gray-500 disabled:cursor-not-allowed"
+            >
+              {awards ? 'Reveal Author Awards!' : 'Calculating...'}
+            </button>
+          </>
+        )}
 
-        <Podium players={playerList} />
+        {revealStage === 1 && (
+          <>
+            <h1 className="text-3xl md:text-5xl font-bold mb-6 text-transparent bg-clip-text bg-gradient-to-r from-quiz-blue to-quiz-purple animate-slide-up">
+              Most Prolific Author
+            </h1>
+            <p className="text-xl text-gray-400 mb-6 animate-slide-up" style={{ animationDelay: '0.2s' }}>
+              Wrote the most questions for the class
+            </p>
+            {awards?.prolific ? (
+              <div className="animate-slide-up flex flex-col items-center" style={{ animationDelay: '0.4s' }}>
+                {awards.prolific.avatar && (
+                  <img
+                    src={getAvatarUrl(awards.prolific.avatar)}
+                    alt=""
+                    className="w-28 h-28 md:w-36 md:h-36 rounded-full object-cover border-4 border-quiz-blue mb-4 shadow-[0_0_30px_rgba(52,152,219,0.5)]"
+                  />
+                )}
+                <div className="text-4xl md:text-6xl font-bold text-white mb-2">{awards.prolific.name}</div>
+                <div className="text-2xl text-gray-400 mb-4">
+                  {awards.prolific.questionCount} question{awards.prolific.questionCount !== 1 ? 's' : ''} written
+                </div>
+                <div className="text-5xl md:text-7xl font-bold text-quiz-green animate-pulse-glow">
+                  +{awards.prolific.bonus.toLocaleString()}
+                </div>
+                <div className="text-xl text-gray-400 mt-1">bonus points!</div>
+              </div>
+            ) : (
+              <div className="text-2xl text-gray-500">No questions were written</div>
+            )}
+            <button
+              onClick={() => setRevealStage(2)}
+              className="mt-10 bg-quiz-purple hover:bg-purple-600 text-white text-2xl font-bold py-4 px-12 rounded-xl btn-press transition-all cursor-pointer"
+            >
+              Next Award
+            </button>
+          </>
+        )}
 
-        <Leaderboard players={playerList} limit={playerList.length} showBreakdown={true} />
+        {revealStage === 2 && (
+          <>
+            <h1 className="text-3xl md:text-5xl font-bold mb-6 text-transparent bg-clip-text bg-gradient-to-r from-quiz-red to-quiz-yellow animate-slide-up">
+              Most Challenging Author
+            </h1>
+            <p className="text-xl text-gray-400 mb-6 animate-slide-up" style={{ animationDelay: '0.2s' }}>
+              Wrote the hardest questions on average
+            </p>
+            {awards?.challenging ? (
+              <div className="animate-slide-up flex flex-col items-center" style={{ animationDelay: '0.4s' }}>
+                {awards.challenging.avatar && (
+                  <img
+                    src={getAvatarUrl(awards.challenging.avatar)}
+                    alt=""
+                    className="w-28 h-28 md:w-36 md:h-36 rounded-full object-cover border-4 border-quiz-red mb-4 shadow-[0_0_30px_rgba(231,76,60,0.5)]"
+                  />
+                )}
+                <div className="text-4xl md:text-6xl font-bold text-white mb-2">{awards.challenging.name}</div>
+                <div className="text-2xl text-gray-400 mb-4">
+                  Only {awards.challenging.avgCorrectPct}% of players got their questions right
+                </div>
+                <div className="text-5xl md:text-7xl font-bold text-quiz-green animate-pulse-glow">
+                  +{awards.challenging.bonus.toLocaleString()}
+                </div>
+                <div className="text-xl text-gray-400 mt-1">bonus points!</div>
+              </div>
+            ) : (
+              <div className="text-2xl text-gray-500">Not enough data</div>
+            )}
+            <button
+              onClick={() => setRevealStage(3)}
+              className="mt-10 bg-quiz-green hover:bg-green-600 text-white text-2xl font-bold py-4 px-12 rounded-xl btn-press transition-all cursor-pointer"
+            >
+              Show Final Leaderboard!
+            </button>
+          </>
+        )}
+
+        {revealStage === 3 && (
+          <>
+            <h1 className="text-4xl md:text-6xl font-bold mb-8 text-transparent bg-clip-text bg-gradient-to-r from-quiz-yellow to-quiz-red animate-slide-up">
+              Final Results!
+            </h1>
+            <Podium players={playerList} />
+            <Leaderboard players={playerList} limit={playerList.length} showBreakdown={true} />
+          </>
+        )}
       </div>
     )
   }

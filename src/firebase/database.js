@@ -200,6 +200,12 @@ export function listenToAnswers(roomCode, questionId, callback) {
   return () => off(answersRef)
 }
 
+export async function getAllAnswers(roomCode) {
+  const snapshot = await get(ref(db, `games/${roomCode}/answers`))
+  if (!snapshot.exists()) return {}
+  return snapshot.val()
+}
+
 // ─── Game Existence Check ───
 export async function gameExists(roomCode) {
   const snapshot = await get(ref(db, `games/${roomCode}/settings`))
