@@ -72,10 +72,11 @@ export async function setPhase(roomCode, phase) {
 }
 
 // ─── Players ───
-export async function joinGame(roomCode, playerId, name) {
+export async function joinGame(roomCode, playerId, name, avatar = null) {
   const playerRef = ref(db, `games/${roomCode}/players/${playerId}`)
   await set(playerRef, {
     name,
+    avatar,
     score: 0,
     answeringScore: 0,
     authorScore: 0,

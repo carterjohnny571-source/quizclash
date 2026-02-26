@@ -1,3 +1,5 @@
+import { getAvatarUrl } from './AvatarPicker'
+
 const medals = ['🥇', '🥈', '🥉']
 
 export default function Leaderboard({ players, limit = 5, showBreakdown = false }) {
@@ -22,6 +24,13 @@ export default function Leaderboard({ players, limit = 5, showBreakdown = false 
               <span className="text-2xl w-10 text-center">
                 {index < 3 ? medals[index] : `#${index + 1}`}
               </span>
+              {player.avatar && (
+                <img
+                  src={getAvatarUrl(player.avatar)}
+                  alt=""
+                  className="w-9 h-9 rounded-full object-cover"
+                />
+              )}
               <span className="font-bold text-lg flex-1 truncate">{player.name}</span>
               <span className="font-mono font-bold text-xl text-quiz-yellow">
                 {player.score.toLocaleString()}

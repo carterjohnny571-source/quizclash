@@ -1,5 +1,6 @@
 import { useEffect } from 'react'
 import confetti from 'canvas-confetti'
+import { getAvatarUrl } from './AvatarPicker'
 
 const podiumConfig = [
   { place: 2, height: 'h-32', color: 'bg-gray-400', emoji: '🥈', delay: 0.3 },
@@ -50,6 +51,13 @@ export default function Podium({ players }) {
           style={{ animationDelay: `${player.delay}s` }}
         >
           <div className="text-4xl mb-2">{player.emoji}</div>
+          {player.avatar ? (
+            <img
+              src={getAvatarUrl(player.avatar)}
+              alt=""
+              className="w-16 h-16 md:w-20 md:h-20 rounded-full object-cover border-3 border-white mb-2"
+            />
+          ) : null}
           <div className="font-bold text-lg md:text-2xl mb-1 truncate max-w-[120px]">
             {player.name}
           </div>
