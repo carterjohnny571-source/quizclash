@@ -90,6 +90,10 @@ export async function updatePlayer(roomCode, playerId, data) {
   await update(ref(db, `games/${roomCode}/players/${playerId}`), data)
 }
 
+export async function kickPlayer(roomCode, playerId) {
+  await remove(ref(db, `games/${roomCode}/players/${playerId}`))
+}
+
 // ─── Questions ───
 export async function submitQuestion(roomCode, question) {
   const questionsRef = ref(db, `games/${roomCode}/questions`)

@@ -4,7 +4,7 @@ import { useTimer } from '../hooks/useTimer'
 import {
   generateRoomCode, createGame, getOrCreateHostId, setSessionRoomCode,
   updateSettings, setPhase, deleteQuestion, startQuiz, advanceQuestion,
-  showQuestionResults, getAnswersForQuestion, updatePlayer
+  showQuestionResults, getAnswersForQuestion, updatePlayer, kickPlayer
 } from '../firebase/database'
 import { processQuestionResults, shuffleArray } from '../utils/scoring'
 import CountdownTimer from '../components/CountdownTimer'
@@ -13,6 +13,7 @@ import Leaderboard from '../components/Leaderboard'
 import QuestionDisplay from '../components/QuestionDisplay'
 import AnswerDistribution from '../components/AnswerDistribution'
 import Podium from '../components/Podium'
+import { getAvatarUrl } from '../components/AvatarPicker'
 
 export default function TeacherHost() {
   const [roomCode, setRoomCode] = useState(null)
@@ -245,7 +246,37 @@ export default function TeacherHost() {
         <div className="text-xl mb-2">
           Players: <span className="text-quiz-green font-bold">{playerList.length}</span>
         </div>
-        <PlayerList players={playerList} />
+
+        {/* Player list with kick buttons */}
+        <div className="flex flex-wrap gap-2 justify-center max-w-2xl mx-auto">
+          {playerList.map(player => (
+            <div
+              key={player.id}
+              className={`
+                flex items-center gap-2 pl-3 pr-1 py-1.5 rounded-full text-sm font-medium
+                ${player.connected !== false ? 'bg-dark-surface text-white' : 'bg-gray-800 text-gray-500'}
+                transition-all duration-300
+              `}
+            >
+              {player.avatar && (
+                <img
+                  src={getAvatarUrl(player.avatar)}
+                  alt=""
+                  className={`w-7 h-7 rounded-full object-cover ${player.connected === false ? 'grayscale' : ''}`}
+                />
+              )}
+              <span>{player.name}</span>
+              {player.connected === false && <span className="text-gray-500 text-xs">(dc)</span>}
+              <button
+                onClick={() => kickPlayer(roomCode, player.id)}
+                className="w-6 h-6 rounded-full bg-quiz-red/20 hover:bg-quiz-red text-quiz-red hover:text-white flex items-center justify-center text-xs font-bold transition-all cursor-pointer ml-1"
+                title={`Kick ${player.name}`}
+              >
+                ✕
+              </button>
+            </div>
+          ))}
+        </div>
 
         {/* Settings */}
         <div className="mt-8 bg-dark-card rounded-2xl p-6 w-full max-w-md space-y-4">
